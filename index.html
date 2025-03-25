@@ -3,7 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>LocalStorage Notepad</title>
+    <title>Markdown Notepad</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/4.3.0/marked.min.js"></script>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -18,9 +19,23 @@
             margin: 50px auto;
         }
 
+        .toolbar button {
+            padding: 8px;
+            margin: 5px;
+            font-size: 1rem;
+            background: #213b88;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+
+        .toolbar button:hover {
+            background: #2c4fa0;
+        }
+
         textarea {
             width: 100%;
-            height: 300px;
+            height: 250px;
             padding: 10px;
             font-size: 1.2rem;
             background: #213b88;
@@ -29,45 +44,173 @@
             outline: none;
         }
 
-        button {
+        .notes-list {
+            margin-top: 20px;
+            text-align: left;
+        }
+
+        .note-item {
+            background: #5885AF;
+            padding: 10px;
+            margin: 5px 0;
+            cursor: pointer;
+        }
+
+        .delete-btn {
+            background: red;
+            color: white;
+            border: none;
+            padding: 5px;
+            float: right;
+            cursor: pointer;
+        }
+
+        .delete-btn:hover {
+            background: darkred;
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: #1a2e5c; /* Darker than text area */
+            padding: 20px;
+            width: 80%;
+            max-width: 500px;
+            border-radius: 5px;
+            color: white;
+            text-align: left;
+        }
+
+        .modal-content {
+            font-size: 1.1rem;
+        }
+
+        .modal button {
             margin-top: 10px;
-            padding: 10px 20px;
-            font-size: 1rem;
+            padding: 10px;
             background: red;
             color: white;
             border: none;
             cursor: pointer;
         }
 
-        button:hover {
+        .modal button:hover {
             background: darkred;
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>LocalStorage Notepad</h1>
+        <h1>Markdown Notepad</h1>
+        
+        <!-- Toolbar -->
+        <div class="toolbar">
+            <button onclick="formatText('**')">Bold</button>
+            <button onclick="formatText('_')">Italic</button>
+            <button onclick="formatText('# ')">H1</button>
+            <button onclick="formatText('## ')">H2</button>
+            <button onclick="formatText('### ')">H3</button>
+            <button onclick="insertLink()">Link</button>
+        </div>
+
         <textarea id="notepad" placeholder="Start typing..."></textarea>
-        <button id="clear">Clear Note</button>
+        <button onclick="saveNote()">Save Note</button>
+
+        <!-- List of saved notes -->
+        <div class="notes-list" id="notesList"></div>
+    </div>
+
+    <!-- Modal for Viewing Notes -->
+    <div class="modal" id="noteModal">
+        <h2 id="modalTitle"></h2>
+        <div class="modal-content" id="modalContent"></div>
+        <button onclick="closeModal()">Close</button>
     </div>
 
     <script>
         const notepad = document.getElementById("notepad");
-        const clearBtn = document.getElementById("clear");
+        const notesList = document.getElementById("notesList");
+        const noteModal = document.getElementById("noteModal");
+        const modalTitle = document.getElementById("modalTitle");
+        const modalContent = document.getElementById("modalContent");
 
-        // Load saved note from LocalStorage
-        notepad.value = localStorage.getItem("savedNote") || "";
+        // Load saved notes
+        function loadNotes() {
+            notesList.innerHTML = "";
+            let notes = JSON.parse(localStorage.getItem("notes")) || [];
+            notes.forEach((note, index) => {
+                let div = document.createElement("div");
+                div.classList.add("note-item");
+                div.innerHTML = `<span onclick="openNote(${index})">${note.title}</span> 
+                                 <button class="delete-btn" onclick="deleteNote(${index})">X</button>`;
+                notesList.appendChild(div);
+            });
+        }
 
-        // Save note automatically on input
-        notepad.addEventListener("input", () => {
-            localStorage.setItem("savedNote", notepad.value);
-        });
-
-        // Clear note
-        clearBtn.addEventListener("click", () => {
+        // Save note
+        function saveNote() {
+            let text = notepad.value.trim();
+            if (!text) return;
+            let title = text.split("\n")[0].slice(0, 30); // First line as title
+            let notes = JSON.parse(localStorage.getItem("notes")) || [];
+            notes.push({ title, content: text });
+            localStorage.setItem("notes", JSON.stringify(notes));
             notepad.value = "";
-            localStorage.removeItem("savedNote");
-        });
+            loadNotes();
+        }
+
+        // Open note in modal
+        function openNote(index) {
+            let notes = JSON.parse(localStorage.getItem("notes")) || [];
+            modalTitle.innerText = notes[index].title;
+            modalContent.innerHTML = marked.parse(notes[index].content); // Render Markdown
+            noteModal.style.display = "block";
+        }
+
+        // Close modal
+        function closeModal() {
+            noteModal.style.display = "none";
+        }
+
+        // Delete note
+        function deleteNote(index) {
+            let notes = JSON.parse(localStorage.getItem("notes")) || [];
+            notes.splice(index, 1);
+            localStorage.setItem("notes", JSON.stringify(notes));
+            loadNotes();
+        }
+
+        // Text formatting
+        function formatText(tag) {
+            let start = notepad.selectionStart;
+            let end = notepad.selectionEnd;
+            let text = notepad.value;
+            let selected = text.substring(start, end);
+            let formatted = tag + selected + tag;
+            notepad.value = text.substring(0, start) + formatted + text.substring(end);
+            notepad.focus();
+        }
+
+        // Insert a Markdown link
+        function insertLink() {
+            let url = prompt("Enter URL:");
+            if (url) {
+                let start = notepad.selectionStart;
+                let end = notepad.selectionEnd;
+                let text = notepad.value;
+                let selected = text.substring(start, end);
+                let linkText = selected || "Link";
+                let formatted = `[${linkText}](${url})`;
+                notepad.value = text.substring(0, start) + formatted + text.substring(end);
+                notepad.focus();
+            }
+        }
+
+        // Load saved notes on page load
+        loadNotes();
     </script>
 </body>
 </html>
